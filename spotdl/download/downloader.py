@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import List
 from urllib.request import urlopen
 
-from mutagen.easyid3 import EasyID3, ID3
-from mutagen.id3 import APIC as AlbumCover
+from mutagen.easyid3 import EasyID3, ID3, EasyID3KeyError
+from mutagen.id3 import APIC as AlbumCover, USLT
 from pytube import YouTube
 
 from spotdl.download.progressHandlers import DisplayManager, DownloadTracker
@@ -155,6 +155,10 @@ class DownloadManager():
         convertedFileName = convertedFileName.replace(
             '"', "'").replace(':', '-')
 
+        # Shorten the filename if it's too long
+        # 250 + .mp3 = 254 (max length == 254)
+        convertedFileName = convertedFileName[:250]
+
         convertedFilePath = Path(".", f"{convertedFileName}.mp3")
 
         # if a song is already downloaded skip it
@@ -270,6 +274,8 @@ class DownloadManager():
         audioFile['titlesort'] = songObj.get_song_name()
         # ! track number
         audioFile['tracknumber'] = str(songObj.get_track_number())
+        # ! disc number
+        audioFile['discnumber'] = str(songObj.get_disc_number())
         # ! genres (pretty pointless if you ask me)
         # ! we only apply the first available genre as ID3 v2.3 doesn't support multiple
         # ! genres and ~80% of the world PC's run Windows - an OS with no ID3 v2.4 support
@@ -281,7 +287,10 @@ class DownloadManager():
         # ! album name
         audioFile['album'] = songObj.get_album_name()
         # ! album artist (all of 'em)
-        audioFile['albumartist'] = songObj.get_album_artists()
+        try:
+            audioFile['albumartist'] = songObj.get_album_artists()
+        except EasyID3KeyError:
+            pass
         # ! album release date (to what ever precision available)
         audioFile['date'] = songObj.get_album_release()
         audioFile['originaldate'] = songObj.get_album_release()
@@ -298,6 +307,11 @@ class DownloadManager():
             desc='Cover',
             data=rawAlbumArt
         )
+        # ! setting the lyrics
+        lyrics = songObj.get_lyrics()
+        USLTOutput = USLT(encoding=3, lang=u'eng', desc=u'desc', text=lyrics)
+        audioFile["USLT::'eng'"] = USLTOutput
+
         audioFile.save(v2_version=3)
 
     def close(self) -> None:
@@ -353,5 +367,5 @@ class DownloadManager():
 
     def _download_asynchronously(self, song_obj_list):
         tasks = [self._pool_download(song) for song in song_obj_list]
-        # call all task asynchronously, and wait until all are finished
+        # call all tasks asynchronously, and wait until all are finished
         self.loop.run_until_complete(asyncio.gather(*tasks))
