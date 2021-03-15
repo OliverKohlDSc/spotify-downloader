@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List
 from urllib.request import urlopen
 
-from mutagen.easyid3 import EasyID3, ID3
+from mutagen.easyid3 import EasyID3, ID3, EasyID3KeyError
 from mutagen.id3 import APIC as AlbumCover, USLT
 from pytube import YouTube
 
@@ -155,6 +155,10 @@ class DownloadManager():
         convertedFileName = convertedFileName.replace(
             '"', "'").replace(':', '-')
 
+        # Shorten the filename if it's too long
+        # 250 + .mp3 = 254 (max length == 254)
+        convertedFileName = convertedFileName[:250]
+
         convertedFilePath = Path(".", f"{convertedFileName}.mp3")
 
         # if a song is already downloaded skip it
@@ -283,7 +287,10 @@ class DownloadManager():
         # ! album name
         audioFile['album'] = songObj.get_album_name()
         # ! album artist (all of 'em)
-        audioFile['albumartist'] = songObj.get_album_artists()
+        try:
+            audioFile['albumartist'] = songObj.get_album_artists()
+        except EasyID3KeyError:
+            pass
         # ! album release date (to what ever precision available)
         audioFile['date'] = songObj.get_album_release()
         audioFile['originaldate'] = songObj.get_album_release()
@@ -360,5 +367,5 @@ class DownloadManager():
 
     def _download_asynchronously(self, song_obj_list):
         tasks = [self._pool_download(song) for song in song_obj_list]
-        # call all task asynchronously, and wait until all are finished
+        # call all tasks asynchronously, and wait until all are finished
         self.loop.run_until_complete(asyncio.gather(*tasks))
